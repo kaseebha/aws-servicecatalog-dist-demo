@@ -1,0 +1,62 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template for Service Catalog Portfolio creation for AWS Distributors
+
+Parameters: 
+  Owner:
+    Description: Owner of this solution
+    Type: String
+    AllowedPattern : '[a-zA-Z0-9 ]*'
+
+Resources: 
+  SecurityOfferingsPortfolio:
+    Type: "AWS::ServiceCatalog::Portfolio"
+    Properties:
+      Description: "A portfolio Security offerings"
+      DisplayName: "Security"
+      ProviderName: !Ref Owner
+
+  WebAppProtectionProduct:
+    Type: "AWS::ServiceCatalog::CloudFormationProduct"
+    Properties:
+      Name: "Web Application Protection v1"
+      Description: "Implements AWS WAF including up to three WAF policies for Web Application protection - https://redingtongroup.com/india/technologysolutions/"
+      Owner: !Ref Owner
+      ProvisioningArtifactParameters:
+        -
+          Name: "AWS Web App Protection"
+          Description: "Implements protection for web applications using AWS WAF."
+          Info:
+            LoadTemplateFromURL: "https://solutionbundles.s3.ap-south-1.amazonaws.com/waf-sample.yaml"
+  WebAppProtectionProductToSecurityPortfolioProductAssociation:
+      Type: "AWS::ServiceCatalog::PortfolioProductAssociation"
+      Properties:
+        PortfolioId: !Ref SecurityOfferingsPortfolio
+        ProductId: !Ref WebAppProtectionProduct
+
+  DataAnalyticsPortfolio:
+    Type: "AWS::ServiceCatalog::Portfolio"
+    Properties:
+      Description: "A portfolio of data analytics."
+      DisplayName: "Data & Analytics"
+      ProviderName: !Ref Owner
+
+  DevOpsPortfolio:
+    Type: "AWS::ServiceCatalog::Portfolio"
+    Properties:
+      Description: "A portfolio of DevOps solutions."
+      DisplayName: "DevOps"
+      ProviderName: !Ref Owner
+
+  SaaSPortfolio:
+    Type: "AWS::ServiceCatalog::Portfolio"
+    Properties:
+      Description: "A portfolio of SaaS solutions."
+      DisplayName: "SaaS"
+      ProviderName: !Ref Owner
+
+  MiscSolutions:
+    Type: "AWS::ServiceCatalog::Portfolio"
+    Properties:
+      Description: "A portfolio of misc solutions."
+      DisplayName: "Misc"
+      ProviderName: !Ref Owner
