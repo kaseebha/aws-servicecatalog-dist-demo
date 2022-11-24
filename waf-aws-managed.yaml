@@ -1,8 +1,6 @@
 AWSTemplateFormatVersion: 2010-09-09
 Description: >-
-  (SO0006-WebACL) - AWS WAF Security Automations v3.2.1: This AWS CloudFormation template helps
-  you provision the AWS WAF Security Automations stack without worrying about creating and
-  configuring the underlying AWS infrastructure.
+  This AWS CloudFormation template helps you provision the AWS WAF Bundle
 
 Parameters:
   WebACLName:
