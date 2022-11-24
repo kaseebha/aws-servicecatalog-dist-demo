@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  (SO0006-WebACL) - AWS WAF Security Automations v3.2.1: This AWS CloudFormation template helps
+  you provision the AWS WAF Security Automations stack without worrying about creating and
+  configuring the underlying AWS infrastructure.
+
+Parameters:
+  WebACLName:
+    Type: String
+    Default: WebACL-WebApp1
+    Description: Identify this Web ACL with a name (eg. webACL-customerName-webapp1)
+
+  EndpointType:
+    Type: String
+    AllowedValues:
+      - 'CLOUDFRONT'
+      - 'REGIONAL'
+    Description: Select 'REGIONAL' for ALB/ELB/API Gateway endpoints and 'CLOUDFRONT' if Cloudfront is the endpoint.
+
+  ActivateAWSManagedRulesParam:
+    Type: String
+    Default: yes
+    AllowedValues:
+      - yes
+      - no
+    Description: Choose yes to enable AWS Managed Rules
+
+  ActivateReputationListsProtectionParam:
+    Type: String
+    Default: yes
+    AllowedValues:
+      - yes
+      - no
+    Description: >-
+      Choose yes to block requests from IP addresses on third-party reputation lists (supported
+      lists: spamhaus, torproject, and emerging threats).
+
+Conditions:
+  AWSManagedCommonRulesActivated: !Equals [!Ref ActivateAWSManagedRulesParam, yes]
+  ReputationListsProtectionActivated: !Equals [!Ref ActivateReputationListsProtectionParam, yes]
+
+Resources:
+  WAFWebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Ref WebACLName
+      Description: 'Custom WAFWebACL'
+      Scope: !Ref EndpointType
+      VisibilityConfig: 
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: WAFWebACLMetrics
+      DefaultAction:
+        Allow: {}
+      Rules:
+        - Fn::If:
+          - AWSManagedCommonRulesActivated
+          - Name: AWS-AWSManagedRulesCommonRuleSet
+            Priority: 0
+            OverrideAction:
+              None: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: RuleWithAWSManagedRulesMetric
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesCommonRuleSet
+          - Ref: AWS::NoValue
+
+        - Fn::If:
+          - ReputationListsProtectionActivated
+          - Name: AWS-AWSManagedRulesAmazonIpReputationList
+            Priority: 1
+            OverrideAction:
+              None: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: RuleWithAWSManagedRulesMetric
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesAmazonIpReputationList
+          - Ref: AWS::NoValue
+
+      
