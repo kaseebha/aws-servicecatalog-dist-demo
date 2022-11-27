@@ -1,0 +1,12 @@
+{
+    "RequestType": "Create",
+    "ServiceToken": "arn:aws:lambda:ap-south-1:122679783945:function:WAFBundleLaunchRegistrationLambda4",
+    "ResponseURL": "https://cloudformation-custom-resource-response-apsouth1.s3.ap-south-1.amazonaws.com/arn%3Aaws%3Acloudformation%3Aap-south-1%3A122679783945%3Astack/lambdatest10/be828a70-6c90-11ed-aa12-0206fc57f6d2%7CLambdaInvoker%7Ce9cfb4c1-75e3-499f-8d63-249c738a8c00?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20221125T071504Z&X-Amz-SignedHeaders=host&X-Amz-Expires=7200&X-Amz-Credential=AKIARN2TU4VHJIKVK3NO%2F20221125%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Signature=c72db7bca98e50b615a4db3b92ba650ee6dd2c8627fdf421e8260dc047e06cc5",
+    "StackId": "arn:aws:cloudformation:ap-south-1:122679783945:stack/lambdatest10/be828a70-6c90-11ed-aa12-0206fc57f6d2",
+    "RequestId": "e9cfb4c1-75e3-499f-8d63-249c738a8c00",
+    "LogicalResourceId": "LambdaInvoker",
+    "ResourceType": "AWS::CloudFormation::CustomResource",
+    "ResourceProperties": {
+        "ServiceToken": "arn:aws:lambda:ap-south-1:122679783945:function:WAFBundleLaunchRegistrationLambda4"
+    }
+}

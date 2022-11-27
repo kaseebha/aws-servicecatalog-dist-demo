@@ -1,0 +1,16 @@
+{
+"Id": "PolicyForS3",
+"Version": "2012-10-17",
+"Statement": [
+{
+  "Sid": "Stmt1",
+  "Action": [
+    "s3:PutObject",
+    "s3:PutObjectAcl"
+  ],
+  "Effect": "Allow",
+  "Resource": "arn:aws:s3:::aws-distributor-bundle-metrics/*",
+    "Principal":{"AWS":"*"}
+        }
+     ]
+}
