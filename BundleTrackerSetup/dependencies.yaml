@@ -1,0 +1,10 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Resources:
+    DistiBundleDeploySNSTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        Subscription:
+          - Endpoint: "kaseebha@amazon.com"
+            Protocol: "email"
+        TopicName: "DBTMonitoringTopic"

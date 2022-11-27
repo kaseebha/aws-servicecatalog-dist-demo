@@ -1,8 +1,22 @@
 AWSTemplateFormatVersion: 2010-09-09
 Description: >-
-  This AWS CloudFormation template helps you provision the AWS WAF Bundle
+  This AWS CloudFormation template helps you provision the AWS WAF Bundle.
 
 Parameters:
+  AWSDistributorName:
+    Type: String
+    Default: AcmeCorp
+    Description: Partner Name
+
+  BundleName:
+    Type: String
+    Default: AWS_WAF_Bundle_lite
+    Description: Name of the AWS bundle being deployed.
+
+  ReportingSNSTopicArn:
+    Type: String
+    Default: arn:aws:sns:ap-south-1:122679783945:DBTMonitoringTopic
+
   WebACLName:
     Type: String
     Default: WebACL-WebApp1
@@ -90,9 +104,9 @@ Resources:
           FunctionName: WAFBundleLaunchRegistrationLambda5
           Environment:
             Variables:
-              AWS_DISTRIBUTOR_NAME: Redington
-              AWS_BUNDLE_NAME: aws_waf_lite_bundle_v1
-              SNS_TOPIC_ARN: arn:aws:sns:ap-south-1:122679783945:disti-bundle-deploy-topic
+              AWS_DISTRIBUTOR_NAME: !Ref AWSDistributorName
+              AWS_BUNDLE_NAME: !Ref BundleName
+              SNS_TOPIC_ARN: !Ref ReportingSNSTopicArn
           Code:
             ZipFile: |
           
@@ -145,14 +159,6 @@ Resources:
           Runtime: python3.9
           Timeout: 60
 
-  LambdaInvoker:
-    Type: AWS::CloudFormation::CustomResource
-    DependsOn: LambdaTrackerFunction
-    Version: "1.0"
-    Properties:
-      ServiceToken: !GetAtt LambdaTrackerFunction.Arn
-
-
   LambdaFunctionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -195,3 +201,29 @@ Resources:
             - s3:*,
             - s3-object-lambda:*
             Resource: "*"
+      - PolicyName: SNSPublishToTopicPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - sns:Publish,
+            - sns:Subscribe,
+            Resource: "*"
+
+  DBTSnsSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: lambda
+      Endpoint: !GetAtt LambdaTrackerFunction.Arn
+      TopicArn: !Ref ReportingSNSTopicArn
+
+  LambdaInvoker:
+    Type: AWS::CloudFormation::CustomResource
+    DependsOn: 
+    - DBTSnsSubscription
+    - LambdaFunctionRole
+    - LambdaTrackerFunction
+    Version: "1.0"
+    Properties:
+      ServiceToken: !GetAtt LambdaTrackerFunction.Arn
