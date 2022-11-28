@@ -48,6 +48,12 @@ Parameters:
       Choose yes to block requests from IP addresses on third-party reputation lists (supported
       lists: spamhaus, torproject, and emerging threats).
 
+  SnsManagedPolicyParam:
+    Type: String
+    Default: arn:aws:iam::aws:policy/AmazonSNSFullAccess
+    Description: arn of sns managed policy
+
+
 Conditions:
   AWSManagedCommonRulesActivated: !Equals [!Ref ActivateAWSManagedRulesParam, yes]
   ReputationListsProtectionActivated: !Equals [!Ref ActivateReputationListsProtectionParam, yes]
@@ -142,7 +148,7 @@ Resources:
                       responseData['account_id'] = account_id
                       sns_client = boto3.client('sns')
                       json_response_data = json.dumps(responseData)
-                      sns_response = sns_client.publish(TargetArn=os.environ['SNS_TOPIC_ARN'],Message=json_response_data,MessageStructure='json')
+                      sns_response = sns_client.publish(TargetArn=os.environ['SNS_TOPIC_ARN'],Message=json_response_data)
                       cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
                     except Exception as e: 
                       print(e)
@@ -201,15 +207,8 @@ Resources:
             - s3:*,
             - s3-object-lambda:*
             Resource: "*"
-      - PolicyName: SNSPublishToTopicPolicy
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action:
-            - sns:Publish,
-            - sns:Subscribe,
-            Resource: "*"
+      ManagedPolicyArns:
+        - !Ref SnsManagedPolicyParam
 
   DBTSnsSubscription:
     Type: AWS::SNS::Subscription
@@ -221,7 +220,6 @@ Resources:
   LambdaInvoker:
     Type: AWS::CloudFormation::CustomResource
     DependsOn: 
-    - DBTSnsSubscription
     - LambdaFunctionRole
     - LambdaTrackerFunction
     Version: "1.0"
