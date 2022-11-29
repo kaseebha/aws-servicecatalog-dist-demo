@@ -1,0 +1,203 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  SnsManagedPolicyParam:
+    Type: String
+    Default: arn:aws:iam::aws:policy/AmazonSNSFullAccess
+    Description: arn of sns managed policy
+  
+  LambdaVPCManagedPolicyParam:
+    Type: String
+    Default: arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+    Description: arn of Lambda VPC managed policy
+
+  ReportingSNSTopicArn:
+    Type: String
+    Default: arn:aws:sns:ap-south-1:122679783945:DBTMonitoringTopic
+    Description: Create
+
+  ReportingS3BucketName:
+    Type: String
+    Default: aws-distributor-bundle-metrics
+    Description: S3 Bucket to hold metrics data
+
+Resources:
+  DistiBundleDeploySNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: "kaseebha@amazon.com"
+          Protocol: "email"
+      TopicName: "DBTMonitoringTopic"
+
+  DistiBundleDeploySNSTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Id: DBTTopicPolicy
+        Version: '2012-10-17'
+        Statement:
+        - Sid: __default_statement_ID
+          Effect: Allow
+          Principal:
+            AWS: "*"
+          Action:
+          - SNS:Publish
+          - SNS:RemovePermission
+          - SNS:SetTopicAttributes
+          - SNS:DeleteTopic
+          - SNS:ListSubscriptionsByTopic
+          - SNS:GetTopicAttributes
+          - SNS:AddPermission
+          - SNS:Subscribe
+          Resource: !Ref ReportingSNSTopicArn
+          Condition:
+            StringEquals:
+              AWS:SourceOwner: '122679783945'
+        - Sid: __console_pub_0
+          Effect: Allow
+          Principal:
+            AWS: "*"
+          Action: SNS:Publish
+          Resource: !Ref ReportingSNSTopicArn
+      Topics:
+      - !Ref DistiBundleDeploySNSTopic
+
+  LambdaTrackerFunction:
+        Type: AWS::Lambda::Function
+        Properties:
+          FunctionName: WAFBundleLaunchRegistrationLambda5
+          Environment:
+            Variables:
+              REPORTING_BUCKET_NAME: !Ref ReportingS3BucketName
+          Code:
+            ZipFile: |
+          
+              import boto3, json, os, uuid
+              from datetime import datetime
+              import cfnresponse
+              import pymysql
+              import rds_config
+    
+              def handler(event, context):
+
+                  event_json = json.dumps(event)
+                  print(f"EVENT:{event_json}")
+
+                  #Store the actual event from sns, convert into python dict
+                  sns_message = json.loads(event["Records"][0]["Sns"]["Message"])
+                  print(f"SNS_MESSAGE: {sns_message}")
+
+                  #If request type is Delete, immediately send SUCCESS
+                  responseData = {}
+                  if sns_message['RequestType'] == "Delete":
+                    cfnresponse.send(sns_message, context, cfnresponse.SUCCESS, responseData)
+                  elif sns_message['RequestType'] == "Create":
+                    responseValue = 120
+                    responseData = {}
+                    
+                    #First send the success response to CFN
+                    cfnresponse.send(sns_message, context, cfnresponse.SUCCESS, responseData)
+                    
+                    try:
+                      #Now gather data and log this bundle deployment to reporting s3 bucket
+                      responseData['bundle_deploy_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                      responseData['account_id'] = sns_message['ResourceProperties']['accountId']
+                      responseData['bundle_name'] = sns_message['ResourceProperties']['bundleName']
+                      responseData['aws_distributor_name'] = sns_message['ResourceProperties']['awsDistributorName']
+                      responseDataJson = json.dumps(responseData)
+
+                      bucket_name = os.environ['REPORTING_BUCKET_NAME']
+                      file_name = str(uuid.uuid4()) + ".json"
+                      lambda_file_path = "/tmp/"+file_name
+                      with open(lambda_file_path, 'w') as json_file:
+                        json_file.write(json.dumps(responseDataJson))
+                      
+                      #copy file to s3 and return success
+                      s3 = boto3.resource("s3")
+                      s3.meta.client.upload_file(lambda_file_path, bucket_name, file_name)
+                      return {
+                          'statusCode': 200,
+                          'body': json.dumps('reporting file created:'+file_name)
+                      }
+
+                    except Exception as e: 
+                      print("Unable to log deployment details...")
+                      print(e)
+                  else:
+                    responseValue = 120
+                    responseData = {}
+                    responseData['Data'] = responseValue
+                    cfnresponse.send(sns_message, context, cfnresponse.SUCCESS, responseData)
+                  
+          Handler: index.handler
+          Role: !GetAtt LambdaFunctionRole.Arn
+          Runtime: python3.9
+          Timeout: 60
+
+  LambdaFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: AppendToLogsPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: "*"
+      - PolicyName: LambdaInvokePolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - lambda:InvokeFunction
+            - sts:GetCallerIdentity
+            Resource: "*"
+      - PolicyName: LambdaS3ReportingBucketPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - s3:PutObject
+            - s3:GetObjectAcl
+            - s3:GetObject
+            Resource: "arn:aws:s3:::aws-distributor-bundle-metrics/*"
+          - Effect: Allow
+            Action:
+            - s3-object-lambda:*
+            Resource: "*"
+      ManagedPolicyArns:
+        - !Ref SnsManagedPolicyParam
+        - !Ref LambdaVPCManagedPolicyParam
+
+  SnsLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt LambdaTrackerFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !Ref ReportingSNSTopicArn
+
+  DBTSnsSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: lambda
+      Endpoint: !GetAtt LambdaTrackerFunction.Arn
+      TopicArn: !Ref ReportingSNSTopicArn

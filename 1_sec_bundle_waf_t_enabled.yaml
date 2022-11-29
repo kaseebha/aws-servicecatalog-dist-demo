@@ -13,10 +13,6 @@ Parameters:
     Default: AWS_WAF_Bundle_lite
     Description: Name of the AWS bundle being deployed.
 
-  ReportingSNSTopicArn:
-    Type: String
-    Default: arn:aws:sns:ap-south-1:122679783945:DBTMonitoringTopic
-
   WebACLName:
     Type: String
     Default: WebACL-WebApp1
@@ -48,11 +44,9 @@ Parameters:
       Choose yes to block requests from IP addresses on third-party reputation lists (supported
       lists: spamhaus, torproject, and emerging threats).
 
-  SnsManagedPolicyParam:
+  DBTSnsTopicArn:
     Type: String
-    Default: arn:aws:iam::aws:policy/AmazonSNSFullAccess
-    Description: arn of sns managed policy
-
+    Default: arn:aws:sns:ap-south-1:122679783945:DBTMonitoringTopic
 
 Conditions:
   AWSManagedCommonRulesActivated: !Equals [!Ref ActivateAWSManagedRulesParam, yes]
@@ -104,124 +98,11 @@ Resources:
                 Name: AWSManagedRulesAmazonIpReputationList
           - Ref: AWS::NoValue
 
-  LambdaTrackerFunction:
-        Type: AWS::Lambda::Function
-        Properties:
-          FunctionName: WAFBundleLaunchRegistrationLambda5
-          Environment:
-            Variables:
-              AWS_DISTRIBUTOR_NAME: !Ref AWSDistributorName
-              AWS_BUNDLE_NAME: !Ref BundleName
-              SNS_TOPIC_ARN: !Ref ReportingSNSTopicArn
-          Code:
-            ZipFile: |
-          
-              import boto3, json, os
-              from datetime import datetime
-              import cfnresponse
-    
-              def handler(event, context):
-
-                  event_json = json.dumps(event)
-                  print(f"EVENT:{event_json}")
-
-                  #If request type is Delete, immediately send SUCCESS
-                  responseData = {}
-                  if event['RequestType'] == "Delete":
-                    cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
-                  elif event['RequestType'] == "Create":
-                    print("######### Stack creation has begun... #######")
-                    responseValue = 120
-                    responseData = {}
-
-                    try: 
-                      #Gather data to log this bundle launch s3 bucket
-                      timestamp = datetime.now()
-                      timestamp = json.dumps({'created_at': timestamp}, default=str)
-                      sts_client = boto3.client('sts')
-                      account_id = sts_client.get_caller_identity()['Account']
-
-                      responseData['Data'] = responseValue
-                      responseData['bundle_name'] = os.environ['AWS_BUNDLE_NAME']
-                      responseData['aws_distributor_name'] = os.environ['AWS_DISTRIBUTOR_NAME']
-                      responseData['timestamp'] = timestamp
-                      responseData['account_id'] = account_id
-                      sns_client = boto3.client('sns')
-                      json_response_data = json.dumps(responseData)
-                      sns_response = sns_client.publish(TargetArn=os.environ['SNS_TOPIC_ARN'],Message=json_response_data)
-                      cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
-                    except Exception as e: 
-                      print(e)
-                      cfnresponse.send(event, context, cfnresponse.FAILED, responseData)
-                  else:
-                    print("######### Unknown operation in progress... #######")
-                    responseValue = 120
-                    responseData = {}
-                    responseData['Data'] = responseValue
-                    cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
-                  
-          Handler: index.handler
-          Role: !GetAtt LambdaFunctionRole.Arn
-          Runtime: python3.9
-          Timeout: 60
-
-  LambdaFunctionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Principal:
-            Service:
-            - lambda.amazonaws.com
-          Action:
-          - sts:AssumeRole
-      Path: "/"
-      Policies:
-      - PolicyName: AppendToLogsPolicy
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action:
-            - logs:CreateLogGroup
-            - logs:CreateLogStream
-            - logs:PutLogEvents
-            Resource: "*"
-      - PolicyName: LambdaInvokePolicy
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action:
-            - lambda:InvokeFunction
-            - sts:GetCallerIdentity
-            Resource: "*"
-      - PolicyName: LambdaS3ReportingBucketPolicy
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action:
-            - s3:*,
-            - s3-object-lambda:*
-            Resource: "*"
-      ManagedPolicyArns:
-        - !Ref SnsManagedPolicyParam
-
-  DBTSnsSubscription:
-    Type: AWS::SNS::Subscription
-    Properties:
-      Protocol: lambda
-      Endpoint: !GetAtt LambdaTrackerFunction.Arn
-      TopicArn: !Ref ReportingSNSTopicArn
-
-  LambdaInvoker:
+  SnsPublishDeployEvent:
     Type: AWS::CloudFormation::CustomResource
-    DependsOn: 
-    - LambdaFunctionRole
-    - LambdaTrackerFunction
     Version: "1.0"
     Properties:
-      ServiceToken: !GetAtt LambdaTrackerFunction.Arn
+      ServiceToken: !Ref DBTSnsTopicArn
+      accountId: !Ref 'AWS::AccountId'
+      bundleName: !Ref BundleName
+      awsDistributorName: !Ref AWSDistributorName
