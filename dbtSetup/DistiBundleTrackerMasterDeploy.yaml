@@ -66,7 +66,7 @@ Resources:
   LambdaTrackerFunction:
         Type: AWS::Lambda::Function
         Properties:
-          FunctionName: WAFBundleLaunchRegistrationLambda5
+          FunctionName: DBTLaunchRegistrationLambda
           Environment:
             Variables:
               REPORTING_BUCKET_NAME: !Ref ReportingS3BucketName
@@ -76,8 +76,6 @@ Resources:
               import boto3, json, os, uuid
               from datetime import datetime
               import cfnresponse
-              import pymysql
-              import rds_config
     
               def handler(event, context):
 
@@ -95,23 +93,19 @@ Resources:
                   elif sns_message['RequestType'] == "Create":
                     responseValue = 120
                     responseData = {}
-                    
                     #First send the success response to CFN
                     cfnresponse.send(sns_message, context, cfnresponse.SUCCESS, responseData)
-                    
+                    #Now gather data and log this bundle deployment to reporting s3 bucket
                     try:
-                      #Now gather data and log this bundle deployment to reporting s3 bucket
                       responseData['bundle_deploy_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                       responseData['account_id'] = sns_message['ResourceProperties']['accountId']
                       responseData['bundle_name'] = sns_message['ResourceProperties']['bundleName']
                       responseData['aws_distributor_name'] = sns_message['ResourceProperties']['awsDistributorName']
-                      responseDataJson = json.dumps(responseData)
-
                       bucket_name = os.environ['REPORTING_BUCKET_NAME']
                       file_name = str(uuid.uuid4()) + ".json"
                       lambda_file_path = "/tmp/"+file_name
                       with open(lambda_file_path, 'w') as json_file:
-                        json_file.write(json.dumps(responseDataJson))
+                        json_file.write(json.dumps(responseData))
                       
                       #copy file to s3 and return success
                       s3 = boto3.resource("s3")
