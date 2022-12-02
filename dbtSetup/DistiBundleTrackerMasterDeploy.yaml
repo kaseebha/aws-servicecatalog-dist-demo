@@ -72,58 +72,41 @@ Resources:
               REPORTING_BUCKET_NAME: !Ref ReportingS3BucketName
           Code:
             ZipFile: |
-          
               import boto3, json, os, uuid
               from datetime import datetime
-              import cfnresponse
-    
+
               def handler(event, context):
 
-                  event_json = json.dumps(event)
-                  print(f"EVENT:{event_json}")
+                  #store the message received from the customer account Lambda POST
+                  post_body = json.loads(event["body"])
 
-                  #Store the actual event from sns, convert into python dict
-                  sns_message = json.loads(event["Records"][0]["Sns"]["Message"])
-                  print(f"SNS_MESSAGE: {sns_message}")
-
-                  #If request type is Delete, immediately send SUCCESS
-                  responseData = {}
-                  if sns_message['RequestType'] == "Delete":
-                    cfnresponse.send(sns_message, context, cfnresponse.SUCCESS, responseData)
-                  elif sns_message['RequestType'] == "Create":
-                    responseValue = 120
-                    responseData = {}
-                    #First send the success response to CFN
-                    cfnresponse.send(sns_message, context, cfnresponse.SUCCESS, responseData)
-                    #Now gather data and log this bundle deployment to reporting s3 bucket
-                    try:
+                  try:
+                      responseData = {}
                       responseData['bundle_deploy_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                      responseData['account_id'] = sns_message['ResourceProperties']['accountId']
-                      responseData['bundle_name'] = sns_message['ResourceProperties']['bundleName']
-                      responseData['aws_distributor_name'] = sns_message['ResourceProperties']['awsDistributorName']
+                      responseData['account_id'] = post_body['accountId']
+                      responseData['bundle_name'] = post_body['bundleName']
+                      responseData['aws_distributor_name'] = post_body['awsDistributorName']
+
                       bucket_name = os.environ['REPORTING_BUCKET_NAME']
                       file_name = str(uuid.uuid4()) + ".json"
                       lambda_file_path = "/tmp/"+file_name
-                      with open(lambda_file_path, 'w') as json_file:
-                        json_file.write(json.dumps(responseData))
-                      
+                      with open(lambda_file_path, 'w') as json_f:
+                        json.dump(responseData, json_f)
+                        #json_f.write(responseDataJson)
+                          
                       #copy file to s3 and return success
                       s3 = boto3.resource("s3")
                       s3.meta.client.upload_file(lambda_file_path, bucket_name, file_name)
+                      
                       return {
-                          'statusCode': 200,
-                          'body': json.dumps('reporting file created:'+file_name)
+                        'statusCode': 200,
+                        'body': json.dumps('dbt report generated:'+file_name)
                       }
 
-                    except Exception as e: 
+                  except Exception as e: 
                       print("Unable to log deployment details...")
                       print(e)
-                  else:
-                    responseValue = 120
-                    responseData = {}
-                    responseData['Data'] = responseValue
-                    cfnresponse.send(sns_message, context, cfnresponse.SUCCESS, responseData)
-                  
+                      
           Handler: index.handler
           Role: !GetAtt LambdaFunctionRole.Arn
           Runtime: python3.9
