@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  This AWS CloudFormation template to provision the reporting Lambda function.
+
+Resources:
+  sendBundleStatsFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: sendBundleStats
+      Environment:
+        Variables:
+          REPORTING_URL: https://7ov76mowvjvdknoaiuteqwcmxi0vrgax.lambda-url.ap-south-1.on.aws/
+      Code:
+        ZipFile: |
+          import boto3, json, urllib3, os
+          import cfnresponse
+
+          def handler(event, context):
+            print(f"EVENT:{event}")
+            print(f"EVENT_JSON: {json.dumps(event)}")
+            
+            #first send success for all CFT event types
+            responseData = {}
+            cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
+            
+            if event['RequestType'] == "Create":
+              try:
+                cf_data_json = json.dumps(event['ResourceProperties'])
+                http = urllib3.PoolManager()
+                response = http.request("POST", os.environ['REPORTING_URL'], headers={'Content-Type': 'application/json'}, body=cf_data_json)
+                if response.status != 200:
+                  print(f"Received response status: {response.status}")
+              except Exception as e:
+                print(e)
+
+            return
+
+      Handler: index.handler
+      Role: !GetAtt LambdaFunctionRole.Arn
+      Runtime: python3.9
+      Timeout: 60
+
+  LambdaFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: AppendToLogsPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: "*"
+      - PolicyName: LambdaInvokePolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - lambda:InvokeFunction
+            - sts:GetCallerIdentity
+            Resource: "*"
