@@ -1,75 +1,39 @@
 AWSTemplateFormatVersion: 2010-09-09
+Description: This AWS CloudFormation template deploys the AWS Distributor Bundle Tracker application
 
 Parameters:
-  SnsManagedPolicyParam:
+  CFNDatabaseName:
     Type: String
-    Default: arn:aws:iam::aws:policy/AmazonSNSFullAccess
-    Description: arn of sns managed policy
-  
-  LambdaVPCManagedPolicyParam:
+    Default: cfn-dbt-metrics-db
+  CFNTableName1:
     Type: String
-    Default: arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
-    Description: arn of Lambda VPC managed policy
-
-  ReportingSNSTopicArn:
-    Type: String
-    Default: arn:aws:sns:ap-south-1:122679783945:DBTMonitoringTopic
-    Description: Create
-
-  ReportingS3BucketName:
-    Type: String
-    Default: aws-distributor-bundle-metrics
-    Description: S3 Bucket to hold metrics data
+    Default: cfn-dbt-metrics-tbl
+  CFT
 
 Resources:
-  DistiBundleDeploySNSTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      Subscription:
-        - Endpoint: "kaseebha@amazon.com"
-          Protocol: "email"
-      TopicName: "DBTMonitoringTopic"
+###
+# S3 bucket to store reporting data
+  ReportingBucket:
+    Type : AWS::S3::Bucket
 
-  DistiBundleDeploySNSTopicPolicy:
-    Type: AWS::SNS::TopicPolicy
+###
+# Create an AWS Glue database
+  DBTDatabase:
+    Type: AWS::Glue::Database
     Properties:
-      PolicyDocument:
-        Id: DBTTopicPolicy
-        Version: '2012-10-17'
-        Statement:
-        - Sid: __default_statement_ID
-          Effect: Allow
-          Principal:
-            AWS: "*"
-          Action:
-          - SNS:Publish
-          - SNS:RemovePermission
-          - SNS:SetTopicAttributes
-          - SNS:DeleteTopic
-          - SNS:ListSubscriptionsByTopic
-          - SNS:GetTopicAttributes
-          - SNS:AddPermission
-          - SNS:Subscribe
-          Resource: !Ref ReportingSNSTopicArn
-          Condition:
-            StringEquals:
-              AWS:SourceOwner: '122679783945'
-        - Sid: __console_pub_0
-          Effect: Allow
-          Principal:
-            AWS: "*"
-          Action: SNS:Publish
-          Resource: !Ref ReportingSNSTopicArn
-      Topics:
-      - !Ref DistiBundleDeploySNSTopic
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Description: Database to hold DBT metrics data
 
+###
+#Lambda to handle writing incoming data to S3
   LambdaTrackerFunction:
         Type: AWS::Lambda::Function
         Properties:
           FunctionName: DBTLaunchRegistrationLambda
           Environment:
             Variables:
-              REPORTING_BUCKET_NAME: !Ref ReportingS3BucketName
+              REPORTING_BUCKET_NAME: !Ref ReportingBucket
           Code:
             ZipFile: |
               import boto3, json, os, uuid
@@ -154,27 +118,17 @@ Resources:
             - s3:PutObject
             - s3:GetObjectAcl
             - s3:GetObject
-            Resource: "arn:aws:s3:::aws-distributor-bundle-metrics/*"
+            Resource: !Sub arn:aws:s3:::${ReportingBucket}/*
           - Effect: Allow
             Action:
             - s3-object-lambda:*
             Resource: "*"
-      ManagedPolicyArns:
-        - !Ref SnsManagedPolicyParam
-        - !Ref LambdaVPCManagedPolicyParam
 
-  SnsLambdaPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !GetAtt LambdaTrackerFunction.Arn
-      Action: lambda:InvokeFunction
-      Principal: sns.amazonaws.com
-      SourceAccount: !Ref 'AWS::AccountId'
-      SourceArn: !Ref ReportingSNSTopicArn
-
-  DBTSnsSubscription:
-    Type: AWS::SNS::Subscription
-    Properties:
-      Protocol: lambda
-      Endpoint: !GetAtt LambdaTrackerFunction.Arn
-      TopicArn: !Ref ReportingSNSTopicArn
+Outputs:
+  S3ReportingBucket:
+    Description: S3 bucket to store incoming data on bundle launches
+    Value: !Ref ReportingBucket
+  
+  GlueDatabase:
+    Description: Glue database to store the processed incoming data
+    Value: !Ref DBTGlueDatabase

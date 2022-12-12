@@ -110,7 +110,7 @@ Resources:
       FunctionName: sendBundleStats
       Environment:
         Variables:
-          REPORTING_URL: https://hswh5gi366kt5ihjdadbveh7ny0qwdyz.lambda-url.ap-south-1.on.aws/
+          REPORTING_URL: https://522pyxhzqqn2rf6gl2o2uikirm0lxcww.lambda-url.ap-south-1.on.aws/
       Code:
         ZipFile: |
           import boto3, json, urllib3, os
