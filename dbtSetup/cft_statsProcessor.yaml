@@ -2,14 +2,23 @@ AWSTemplateFormatVersion: 2010-09-09
 Description: >-
   This AWS CloudFormation template to provision the reporting Lambda function.
 
+Parameters:
+  AWSDistributorName:
+    Type: String
+    Description: Partner Name
+
+  BundleName:
+    Type: String
+    Description: Name of the AWS bundle being deployed.
+
 Resources:
   sendBundleStatsFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: sendBundleStats
+      FunctionName: cft_bundle_stats_processor
       Environment:
         Variables:
-          REPORTING_URL: https://7ov76mowvjvdknoaiuteqwcmxi0vrgax.lambda-url.ap-south-1.on.aws/
+          REPORTING_URL: https://522pyxhzqqn2rf6gl2o2uikirm0lxcww.lambda-url.ap-south-1.on.aws/
       Code:
         ZipFile: |
           import boto3, json, urllib3, os
@@ -73,3 +82,11 @@ Resources:
             - lambda:InvokeFunction
             - sts:GetCallerIdentity
             Resource: "*"
+
+  sendStatsCustomResource:
+    Type: AWS::CloudFormation::CustomResource
+    Properties: 
+      ServiceToken: !GetAtt sendBundleStatsFunction.Arn
+      accountId: !Sub ${AWS::AccountId}
+      bundleName: !Ref BundleName
+      awsDistributorName: !Ref AWSDistributorName

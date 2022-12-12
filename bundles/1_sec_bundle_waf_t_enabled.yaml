@@ -57,6 +57,31 @@ Conditions:
   ReputationListsProtectionActivated: !Equals [!Ref ActivateReputationListsProtectionParam, yes]
   isReportingEnabled: !Equals [!Ref ReportingEnabled, yes]
 
+Metadata:
+  AWS:CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "Launch Configuration"
+        Parameters:
+          - WebACLName
+          - EndpointType
+          - ActivateAWSManagedRulesParam
+          - ActivateReputationListsProtectionParam
+      -
+        Label:
+          default: "Statistics Reporting"
+        Parameters:
+          - AWSDistributorName
+          - BundleName
+          - ReportingEnabled
+
+    ParameterLabels:
+      ActivateAWSManagedRulesParam:
+        default: "Activate AWS Managed Rules?"
+      ActivateReputationListsProtectionParam:
+        default: "Activate Reputation Lists Protection?"
+
 Resources:
   WAFWebACL:
     Type: AWS::WAFv2::WebACL
@@ -103,85 +128,11 @@ Resources:
                 Name: AWSManagedRulesAmazonIpReputationList
           - Ref: AWS::NoValue
 
-  sendBundleStatsFunction:
-    Type: AWS::Lambda::Function
-    Condition: isReportingEnabled
-    Properties:
-      FunctionName: sendBundleStats
-      Environment:
-        Variables:
-          REPORTING_URL: https://522pyxhzqqn2rf6gl2o2uikirm0lxcww.lambda-url.ap-south-1.on.aws/
-      Code:
-        ZipFile: |
-          import boto3, json, urllib3, os
-          import cfnresponse
-
-          def handler(event, context):
-            print(f"EVENT:{event}")
-            print(f"EVENT_JSON: {json.dumps(event)}")
-            
-            #first send success for all CFT event types
-            responseData = {}
-            cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
-            
-            if event['RequestType'] == "Create":
-              try:
-                cf_data_json = json.dumps(event['ResourceProperties'])
-                http = urllib3.PoolManager()
-                response = http.request("POST", os.environ['REPORTING_URL'], headers={'Content-Type': 'application/json'}, body=cf_data_json)
-                if response.status != 200:
-                  print(f"Received response status: {response.status}")
-              except Exception as e:
-                print(e)
-
-            return
-
-      Handler: index.handler
-      Role: !GetAtt LambdaFunctionRole.Arn
-      Runtime: python3.9
-      Timeout: 60
-
-  LambdaFunctionRole:
-    Type: AWS::IAM::Role
-    Condition: isReportingEnabled
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-        - Effect: Allow
-          Principal:
-            Service:
-            - lambda.amazonaws.com
-          Action:
-          - sts:AssumeRole
-      Path: "/"
-      Policies:
-      - PolicyName: AppendToLogsPolicy
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action:
-            - logs:CreateLogGroup
-            - logs:CreateLogStream
-            - logs:PutLogEvents
-            Resource: "*"
-      - PolicyName: LambdaInvokePolicy
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action:
-            - lambda:InvokeFunction
-            - sts:GetCallerIdentity
-            Resource: "*"
-
-  sendDeployStatsEvent:
-    Type: AWS::CloudFormation::CustomResource
-    Condition: isReportingEnabled
-    Version: "1.0"
-    Properties:
-      ServiceToken: !GetAtt sendBundleStatsFunction.Arn
-      accountId: !Ref 'AWS::AccountId'
-      bundleName: !Ref BundleName
-      awsDistributorName: !Ref AWSDistributorName
+  sendStatistics:
+    Type: AWS::CloudFormation::Stack
+    Properties: 
+      TemplateURL: !Sub "https://s3.ap-south-1.amazonaws.com/aws-distribution-bundle-templates/cft_statsProcessor.yaml"
+      Parameters:
+        AWSDistributorName: !Ref AWSDistributorName
+        BundleName: !Ref BundleName
+      TimeoutInMinutes: 5
